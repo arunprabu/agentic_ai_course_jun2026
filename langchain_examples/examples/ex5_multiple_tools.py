@@ -7,6 +7,7 @@ import os
 
 # load the env variables
 load_dotenv()
+
 # what's a tool?
 # Tool is a function that the agent can call
 # tool must have a name and description
@@ -59,9 +60,29 @@ general_purpose_agent = create_agent(
 response = general_purpose_agent.invoke(
     {
         "messages": [
+            # {
+            #     "role": "user",
+            #     "content": "what's the weather in chennai",
+            # }
+            # {
+            #     "role": "user",
+            #     "content": "tell me the gold rate in chennai",
+            # }
+            # {
+            #     "role": "user",
+            #     "content": "what's the weather in chennai and tell me the gold rate there",
+            # }
+            # {
+            #     "role": "user",
+            #     "content": "What's the weather in Chennai, London, Tokyo, and compare their gold rates?",
+            # }
+            # {
+            #     "role": "user",
+            #     "content": "What's the weather in Chennai and convert the temperature to Fahrenheit and Kelvin while also giving the gold rate in USD per ounce?",
+            # }
             {
                 "role": "user",
-                "content": "what's the weather in chennai and tell me the gold rate there",
+                "content": "Tell me the weather in the place where the next Olympics will be held and summarize the three biggest headlines from that country today and also give the links to original news website",
             }
         ]
     }

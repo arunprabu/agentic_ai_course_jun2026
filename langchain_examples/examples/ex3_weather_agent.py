@@ -29,7 +29,7 @@ def weather_tool(latitude: str, longitude: str):
 
 
 weather_agent = create_agent(
-    model="openai:gpt-5.5",  # brain of the agent
+    model="anthropic:claude-sonnet-5",  # brain of the agent
     tools=[weather_tool],  # registering the tools to the agent
     system_prompt="""You are a weather assistant. 
 		You must give accurate weather information only for the given city. 

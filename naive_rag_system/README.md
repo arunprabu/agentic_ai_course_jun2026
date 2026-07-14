@@ -7,8 +7,8 @@ password: Pass@123
 File to Ingest: data/HR_Support_Desk_KnowledgeBase.pdf
 
 Chunking Strategy:
-Chunk Size: 1000 characters
-Chunk overlap: 200 characters
+Chunk Size: 1000 characters (upto 1000 chars)
+Chunk overlap: 200 characters (upto 200 chars)
 Vector dimensions: default (1536)
 
 Embedding Model: text-embedding-3-small from OpenAI
@@ -20,3 +20,12 @@ python -m venv .venv
 .venv\Scripts\activate.bat (win)
 
 uv add python-dotenv
+
+=====
+
+# Missed
+
+    1. fastapi endpoints
+    2. create_agent of langchain
+
+=====

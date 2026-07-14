@@ -13,6 +13,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.core.db import get_vector_store
 
+
 import os
 
 load_dotenv()

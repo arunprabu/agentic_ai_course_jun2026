@@ -29,3 +29,12 @@ uv add python-dotenv
     2. create_agent of langchain
 
 =====
+
+## vectorization is not recommended for the following file types directly
+
+===
+.xls, .xlsx, .csv, .json, .html
+
+for the above files preprocessing required.
+
+- either enrich the files content to be plain text or clean up noise

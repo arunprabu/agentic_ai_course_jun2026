@@ -16,8 +16,9 @@ _raw_conn = os.getenv("PG_CONNECTION_STRING_FTS")
 
 _KEYWORD_PATTERNS = [
     r"[A-Z]{2,}-\d{4}-\w+",  # policy/ticket codes: POL-2024-HR-007
-    r"\b[A-Z]{2,5}\b",  # short uppercase abbreviations: LTA, CTC, ESI
-    r"\d{6,}",  # long numeric IDs / employee
+    r"\b[A-Z]{2,5}\b",  # abbreviations: LTA, CTC, ESI
+    r"\d{6,}",  # long numeric IDs / employee IDs
+    r"\b[A-Z][A-Za-z]+\s+[A-Z]?\d+(?:-[A-Z0-9]+)?[A-Z]*\b",
 ]
 
 _KEYWORD_RE = re.compile("|".join(_KEYWORD_PATTERNS))
@@ -31,16 +32,17 @@ def query_documents(query: str, k: int, collection_name: str = "hr_support_desk"
     if mode == "fts":
         # call _search_fts function
         print("FTS needed")
-        _search_fts(query, k, collection_name)
+        return _search_fts(query, k, collection_name)
 
     if mode == "vector":
         # call _search_vector function
         print("Vector search needed")
-        _search_vector(query, k, collection_name)
+        return _search_vector(query, k, collection_name)
 
     if mode == "hybrid":
         # call _search_hybrid function
         print("Hybrid search needed")
+        return _search_hybrid(query, k, collection_name)
 
 
 def _search_fts(query: str, k: int, collection_name: str):
@@ -66,7 +68,6 @@ def _search_fts(query: str, k: int, collection_name: str):
         with conn.cursor() as cur:
             cur.execute(sql, {"query": query, "collection": collection_name, "k": k})
             rows = cur.fetchall()
-            print(rows)
 
     output = [
         {
@@ -77,7 +78,7 @@ def _search_fts(query: str, k: int, collection_name: str):
         for row in rows
     ]
 
-    print(output)
+    # print(output)
 
     return output
 
@@ -94,8 +95,48 @@ def _search_vector(query: str, k: int, collection_name: str):
         for doc in docs
     ]
 
-    print(output)
+    # print(output)
     return output
+
+
+def _search_hybrid(query: str, k: int, collection_name: str):
+    """Merge vector and fts results using RRF (Reciprocal Rank Fusion)
+    Chunks appearing in both search results will rank higher than those in only one
+    The constant 60 prevents top-ranked outputs from dominating
+    How RRF scores for a chunk = sum of 1/(rank + 60)
+    """
+    print("Running Hybrid Search")
+
+    vector_search_results = _search_vector(query, 5, collection_name)
+    fts_results = _search_fts(query, 5, collection_name)
+
+    rrf_scores: dict[str, float] = {}
+    chunk_map: dict[str, dict] = {}
+
+    # Walk the vector results in ranked order (best match first).
+    # enumerate gives rank 0, 1, 2... so we add +1 below to make ranks start at 1.
+    for rank, doc in enumerate(vector_search_results):
+        # Use the first 120 chars of the chunk text as an identity key.
+        # Same chunk retrieved by both searches -> same key -> its scores add up.
+        key = doc["content"][:120]
+        # RRF formula: score += 1 / (k_constant + rank). Better rank (smaller number)
+        # gives a bigger score. .get(key, 0) lets us accumulate across both loops.
+        rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (60 + rank + 1)
+        # Remember the full chunk so we can rebuild the final list from the winning keys.
+        chunk_map[key] = {"content": doc["content"], "metadata": doc["metadata"]}
+
+    # Same pass over the FTS results. A chunk found by BOTH searches gets scored
+    # twice here, which is exactly how RRF rewards agreement between the two methods.
+    for rank, item in enumerate(fts_results):
+        key = item["content"][:120]
+        rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (60 + rank + 1)
+        chunk_map[key] = {"content": item["content"], "metadata": item["metadata"]}
+
+    # this line sorts the results of our RRF calculation so that,
+    # the higher scoring doc/chunk appear at the very top of the final list
+    ranked = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+    print(ranked)
+    return [chunk_map[key] for key, _ in ranked[:k]]
 
 
 def _detect_mode(query: str):
@@ -116,5 +157,17 @@ def _detect_mode(query: str):
 
 
 if __name__ == "__main__":
-    user_query = "how to book car?"
-    query_documents(user_query, 5)
+    # query = "how to apply for leave?"
+    # query = "what is Form 16?"
+    query = "leave policy"
+    results = query_documents(query, k=5)
+
+    print(f"\nTop {len(results)} results for: '{query}'\n{'=' * 60}")
+    for i, item in enumerate(results, 1):
+        metadata = item["metadata"]
+        print(f"""\n[{i}] Source: {metadata.get('source')} | 
+              Page: {metadata.get('page')}""")
+        print(item["content"])
+
+
+# uv run python -m app.retrieval.retrieval_v2

@@ -1,40 +1,56 @@
-Vector DB: Pgvector
-Database Name: hr_rag_db
-Credentials:
-username: postgres
-password: Pass@123
+# Naive RAG System
 
-File to Ingest: data/HR_Support_Desk_KnowledgeBase.pdf
+A simple Retrieval-Augmented Generation (RAG) setup over an HR support-desk
+knowledge base, using pgvector for storage and OpenAI for embeddings.
 
-Chunking Strategy:
-Chunk Size: 1000 characters (upto 1000 chars)
-Chunk overlap: 200 characters (upto 200 chars)
-Vector dimensions: default (1536)
+## Vector DB
 
-Embedding Model: text-embedding-3-small from OpenAI
-OpenAI Api key: in .env
+- **Engine:** Pgvector
+- **Database name:** `hr_rag_db`
+- **Credentials:**
+  - username: `postgres`
+  - password: `Pass@123`
 
-===
+## File to Ingest
 
+```
+data/HR_Support_Desk_KnowledgeBase.pdf
+```
+
+## Chunking Strategy
+
+| Setting            | Value                        |
+| ------------------ | ---------------------------- |
+| Chunk size         | 1000 characters (up to 1000) |
+| Chunk overlap      | 200 characters (up to 200)   |
+| Vector dimensions  | default (1536)               |
+
+## Embedding Model
+
+- **Model:** `text-embedding-3-small` (OpenAI)
+- **OpenAI API key:** stored in `.env`
+
+## Environment Setup
+
+```bash
 python -m venv .venv
-.venv\Scripts\activate.bat (win)
+.venv\Scripts\activate.bat   # Windows
 
 uv add python-dotenv
+```
 
-=====
+## Missed
 
-# Missed
+1. FastAPI endpoints
+2. `create_agent` of LangChain
 
-    1. fastapi endpoints
-    2. create_agent of langchain
+## Vectorization Notes
 
-=====
+Vectorization is **not** recommended directly for the following file types:
 
-## vectorization is not recommended for the following file types directly
-
-===
+```
 .xls, .xlsx, .csv, .json, .html
+```
 
-for the above files preprocessing required.
-
-- either enrich the files content to be plain text or clean up noise
+For the above files, preprocessing is required — either enrich the file
+content into plain text, or clean up the noise before ingesting.

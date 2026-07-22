@@ -19,11 +19,11 @@ data/HR_Support_Desk_KnowledgeBase.pdf
 
 ## Chunking Strategy
 
-| Setting            | Value                        |
-| ------------------ | ---------------------------- |
-| Chunk size         | 1000 characters (up to 1000) |
-| Chunk overlap      | 200 characters (up to 200)   |
-| Vector dimensions  | default (1536)               |
+| Setting           | Value                        |
+| ----------------- | ---------------------------- |
+| Chunk size        | 1000 characters (up to 1000) |
+| Chunk overlap     | 200 characters (up to 200)   |
+| Vector dimensions | default (1536)               |
 
 ## Embedding Model
 
@@ -54,3 +54,10 @@ Vectorization is **not** recommended directly for the following file types:
 
 For the above files, preprocessing is required — either enrich the file
 content into plain text, or clean up the noise before ingesting.
+
+## Index your DB
+
+CREATE INDEX ON
+langchain_pg_embedding
+USING ivfflat
+((embedding::vector(1536)) vector_cosine_ops) WITH (lists = 100);

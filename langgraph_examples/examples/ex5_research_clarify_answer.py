@@ -21,8 +21,8 @@ def prompt_review_node(state: AgentState):
 
     prompt = f"""
         You are a prompt reviewer. Classify the user query as: 
-    - CLEAR
-    - UNCLEAR
+        - CLEAR
+        - UNCLEAR
         Query: {query}
 
         Respond with only one word: CLEAR or UNCLEAR
@@ -77,5 +77,5 @@ graph_image = app.get_graph().draw_mermaid_png()
 with open("examples/ex5_research_clarify_answer.png", "wb") as f:
     f.write(graph_image)
 
-result = app.invoke({"query": "Explain sdgfsdfgsdfgfsdkjdg in simple terms"})
+result = app.invoke({"query": "Explain quantum computing in simple terms"})
 print(result)

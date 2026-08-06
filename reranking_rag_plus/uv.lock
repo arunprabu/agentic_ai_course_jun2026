@@ -2083,7 +2083,7 @@ wheels = [
 ]
 
 [[package]]
-name = "reranking-plus"
+name = "reranking-rag-plus"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

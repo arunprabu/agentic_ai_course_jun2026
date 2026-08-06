@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import Optional
 
 
 # query api endpoint request format
@@ -13,6 +14,7 @@ class QueryResponse(BaseModel):
     policy_citations: str
     page_no: str
     document_name: str
+    sql_query_executed: Optional[str]
 
 
 class AIResponse(BaseModel):
@@ -23,3 +25,6 @@ class AIResponse(BaseModel):
     )
     page_no: str = Field(description="Page number in the metadata")
     document_name: str = Field(description="Name of the document")
+    sql_query_executed: Optional[str] = Field(
+        description="The AI generated and executed SQL query for the query"
+    )

@@ -12,6 +12,7 @@ dependencies = [
     "langchain-postgres>=0.0.17",
     "langchain-text-splitters>=1.1.2",
     "langgraph>=1.2.10",
+    "mem0ai>=2.0.17",
     "pypdf>=6.14.2",
     "python-dotenv>=1.2.2",
     "unstructured>=0.25.0",

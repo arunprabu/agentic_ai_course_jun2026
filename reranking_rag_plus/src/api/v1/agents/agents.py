@@ -5,6 +5,7 @@
 
 import os
 import cohere
+import json
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
@@ -15,6 +16,7 @@ from src.api.v1.states.rag_state import RAGState
 from src.api.v1.tools.vector_search_tool import vector_search_node
 from src.api.v1.schemas.query_schema import AIResponse
 from src.core.db import get_sql_database
+from src.core.memory import get_memory
 
 load_dotenv()
 
@@ -28,6 +30,37 @@ def _get_llm():
 class RouteDecision(BaseModel):
     route: Literal["VECTOR_DB", "RDBMS"]
     reason: str  # for debugging
+
+
+def recall_memory_node(state: RAGState) -> RAGState:
+    """fetch what mem0 already knows about this user, before we answer"""
+    memory = get_memory()
+    # NOTE: mem0 2.x rejects a top-level user_id here - it must go in filters
+    hits = memory.search(
+        state["query"], filters={"user_id": state["user_id"]}, top_k=5
+    )
+    facts = [h["memory"] for h in hits.get("results", [])]
+
+    print(f"[recall_memory_node] {len(facts)} memories recalled for {state['user_id']}")
+    for f in facts:
+        print("  -", f)
+
+    memory_context = "\n".join(f"- {f}" for f in facts) if facts else "No prior context."
+    return {**state, "memory_context": memory_context}
+
+
+def save_memory_node(state: RAGState) -> RAGState:
+    """
+    store only the user's turn. feeding the assistant's answer in as well makes
+    mem0 extract policy text as "facts about the user", which then pollutes
+    every later prompt.
+    """
+    memory = get_memory()
+    memory.add(
+        [{"role": "user", "content": state["query"]}], user_id=state["user_id"]
+    )
+    print(f"[save_memory_node] Turn saved for {state['user_id']}")
+    return state
 
 
 def router_node(state: RAGState) -> RAGState:
@@ -84,8 +117,11 @@ def nl2sql_node(state: RAGState) -> RAGState:
             (
                 "system",
                 """
-                    You are a PostgreSQL expert. Given the database schema below, 
+                    You are a PostgreSQL expert. Given the database schema below,
                     write a single valid SELECT query that answers the user's question.
+
+                    Known facts about this user (use to resolve "my", "mine" etc.):
+                    {memory_context}
 
                     Rules:
                     - Return ONLY the raw SQL — no explanation, no summary, no markdown fences, no backticks.
@@ -118,7 +154,13 @@ def nl2sql_node(state: RAGState) -> RAGState:
     # preprare the chain and invoke with a query
     sql_chain = sql_prompt | llm
     # look for sql query only
-    raw_sql = sql_chain.invoke({"schema": schema_info, "question": state["query"]})
+    raw_sql = sql_chain.invoke(
+        {
+            "schema": schema_info,
+            "question": state["query"],
+            "memory_context": state["memory_context"],
+        }
+    )
     print("========GENERATED raw_sql query is: =====")
     print(raw_sql.content)
     generated_sql = raw_sql.content
@@ -223,6 +265,11 @@ def generate_answer_node(state: RAGState):
                     You are a helpful assistant. Answer the user's question using only the
                     provided context.
 
+                    Known facts about this user (use these to personalise the answer -
+                    e.g. which policy applies to them - but NEVER treat them as a source
+                    of policy truth. The context below is the only source of truth):
+                    {memory_context}
+
                     IMPORTANT:
                     The context may contain chunks from MULTIPLE versions of the same
                     document (e.g. a 2025 edition and a 2026 edition).
@@ -255,7 +302,13 @@ def generate_answer_node(state: RAGState):
     )
 
     chain = prompt | structured_llm
-    result = chain.invoke({"context": context, "query": state["query"]})
+    result = chain.invoke(
+        {
+            "context": context,
+            "query": state["query"],
+            "memory_context": state["memory_context"],
+        }
+    )
 
     print(f"[generate_answer_node] Answer generated.")
     return {**state, "response": result.model_dump()}
@@ -264,14 +317,17 @@ def generate_answer_node(state: RAGState):
 def build_rag_graph():
     workflow = StateGraph(RAGState)
 
+    workflow.add_node("recall_memory", recall_memory_node)
     workflow.add_node("router", router_node)
     workflow.add_node("nl2sql", nl2sql_node)
     workflow.add_node("vector_search", vector_search_node)
     workflow.add_node("rerank", rerank_node)
     workflow.add_node("generate_answer", generate_answer_node)
+    workflow.add_node("save_memory", save_memory_node)
 
     # the following is the starting point
-    workflow.set_entry_point("router")
+    workflow.set_entry_point("recall_memory")
+    workflow.add_edge("recall_memory", "router")
 
     # conditional routing: "vectordb" -> vector_search (or) "rdbms" -> nl2sql
     workflow.add_conditional_edges(
@@ -282,7 +338,10 @@ def build_rag_graph():
 
     workflow.add_edge("vector_search", "rerank")
     workflow.add_edge("rerank", "generate_answer")
-    workflow.add_edge("generate_answer", END)
+    # both branches save the turn to mem0 before finishing
+    workflow.add_edge("generate_answer", "save_memory")
+    workflow.add_edge("nl2sql", "save_memory")
+    workflow.add_edge("save_memory", END)
 
     search_agent = workflow.compile()
 
@@ -297,14 +356,42 @@ def build_rag_graph():
 rag_graph = build_rag_graph()
 
 
-def run_search_agent(query: str):
+# non streaming response
+def run_search_agent(query: str, user_id: str):
     print("============1. INSIDE run_search_agent ")
     initial_state = {
         "query": query,
         "retrieved_docs": [],
         "reranked_docs": [],
         "response": {},
+        "user_id": user_id,
+        "memory_context": "",
     }
 
     final_state = rag_graph.invoke(initial_state)
     return final_state["response"]
+
+
+async def run_search_agent_stream(query: str, user_id: str):
+    print("============1. INSIDE run_search_agent ")
+    initial_state = {
+        "query": query,
+        "retrieved_docs": [],
+        "reranked_docs": [],
+        "response": {},
+        "user_id": user_id,
+        "memory_context": "",
+    }
+
+    async for event in rag_graph.astream_events(initial_state, version="v1"):
+        kind = event["event"]
+        print(kind)
+
+        # if it is a token generated by the chat model
+        if kind == "on_chat_model_stream":
+            content = event["data"]["chunk"].content
+            if content:
+                # format as an Server Side Event data straem payload
+                yield f"data: {json.dumps({'token': content})}\n\n"
+
+    yield "data: [DONE]\n\n"

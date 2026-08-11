@@ -5,6 +5,9 @@ from typing import Optional
 # query api endpoint request format
 class QueryRequest(BaseModel):
     query: str = Field(description="The user's question")
+    user_id: str = Field(
+        default="demo_user", description="Identifies the mem0 memory owner"
+    )
 
 
 # query api endpoint response format
